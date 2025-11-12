@@ -39,7 +39,7 @@ I also modified stuff for my taste:
 
 Before you begin, ensure you have the following installed on your system:
 
-1.  **Python**: Version **3.11** is required.
+1.  **Python**: Version **3.10** is **required** anything __higher__ than 3.10 will fail to compile!!!!.
 2.  **Git**: For cloning the repository.
 3.  **CUDA Compatible GPU**: For acceptable performance, a GPU is highly recommended. The underlying models will be extremely slow on a CPU.
 4.  **FFmpeg**: This is a critical dependency for performing various audio processing tasks.
@@ -50,24 +50,37 @@ Follow these steps to set up and run the ChatterboxToolkitUI on your local machi
 
 ### 1. Clone the Repository
 
-Open your terminal or command prompt and clone the repository.
+Create a folder, CMD into it, and clone the repository.
 
-```bash
+```cmd
 git clone https://github.com/dasjoms/ChatterboxToolkitUI.git
+```
+
+```cmd
 cd ChatterboxToolkitUI
 ```
 
 ### 2. Set Up a Python Virtual Environment
 
-Create a virtual environment using python 3.11 to avoid dependency conflicts.
+Create a virtual environment using python 3.10 to avoid dependency conflicts.
 
-```bash
-py -3.11 -m venv toolkit
+```cmd
+pyenv install 3.10.11
 ```
+
+```cmd
+call pyenv local 3.10.11
+```
+
+```cmd
+python -m venv %USERPROFILE%\chatterbox
+```
+
+
 Activate the virtual environment.
 
-```bash
-.\toolkit\Scripts\activate
+```cmd
+[...]\chatterbox\Scripts\activate.bat
 ```
 
 
@@ -95,15 +108,15 @@ Once running, you will see output in your terminal like this:
 ```
 * Running on local URL:  http://127.0.0.1:7860
 ```
+Your browser should open with the app ready to be used.
 
-Open the local URL in your web browser to use the application.
 
 ## A Typical Workflow
 
 1.  **Create a Project**: Navigate to the "Projects" tab and create a new project.
 2.  **Prepare Data**:
     -   Upload a long text file to the project's `input_files` folder using the "Project Utilities" uploader or manually move it there.
-    -   Go to the "Data Preparation" tab to split the text into manageable chunks. The outputs will be saved to the `processed_text/` folders.
+    -   Go to the "Data Preparation" tab to split the text into manageable chunks. The outputs will be saved to the configured output folder.
 3.  **Generate Audio**:
     -   Go to the "Batch Generation" tab.
     -   Load your processed files from the project.
