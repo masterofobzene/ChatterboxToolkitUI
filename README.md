@@ -53,7 +53,7 @@ Follow these steps to set up and run the ChatterboxToolkitUI on your local machi
 Create a folder, CMD into it, and clone the repository.
 
 ```cmd
-git clone https://github.com/dasjoms/ChatterboxToolkitUI.git
+git clone https://github.com/masterofobzene/ChatterboxToolkitUI.git
 ```
 
 ```cmd
