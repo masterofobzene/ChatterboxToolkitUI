@@ -16,6 +16,8 @@ import shutil
 import zipfile
 import json # For manifest
 import random
+import webbrowser
+import threading
 
 # NLTK for text processing
 import nltk
@@ -209,15 +211,15 @@ def yield_vc_updates(log_msg=None, audio_data=None, file_list=None, log_append=T
         files_update = gr.update(value=None, visible=False)
     yield log_update, audio_update, files_update
 
-PROJECTS_BASE_DIR = "projects"
+PROJECTS_BASE_DIR = r"E:\PERFIL\Downloads"
 _current_project_root_dir = "" 
 _current_project_name = "" 
 PROJECT_SUBDIRS = {
-    "input_files": "input_files", "voice_conversion": "voice_conversion", "processed_text": "processed_text",
-    "processed_audio": "processed_audio", "single_generations_tts": os.path.join("single_generations", "tts"), # Renamed to 'single_generations_tts' for clarity, points to tts
-    "single_generations_vc": os.path.join("single_generations", "vc"),
-    "batch_generations_tts": os.path.join("batch_generations", "tts"),
-    "batch_generations_vc": os.path.join("batch_generations", "vc"),
+    "input_files": "", "voice_conversion": "", "processed_text": "",
+    "processed_audio": "", "single_generations_tts": "",
+    "single_generations_vc": "",
+    "batch_generations_tts": "",
+    "batch_generations_vc": "",
 }
 _trigger_ui_update_on_project_state_change = None 
 
@@ -326,14 +328,12 @@ def generate_vc(audio_filepath,target_voice_filepath,inference_cfg_rate: float,s
         else: base_output_dir = os.path.join(_current_project_root_dir, PROJECT_SUBDIRS["single_generations_vc"])
     else:
         yield from yield_vc_updates(log_msg="No project selected, using generic 'outputs' folder.")
-        base_output_dir = os.path.join("outputs", "voice2voice")
+        base_output_dir = os.path.join(r"E:\PERFIL\Downloads", "voice2voice")
     input_audio_name = os.path.splitext(os.path.basename(audio_filepath))[0] if audio_filepath else "no_input_audio"
     target_voice_name = os.path.splitext(os.path.basename(target_voice_filepath))[0] if target_voice_filepath else "default_voice"
-    date_folder = datetime.now().strftime('%Y%m%d')
-    vc_base_date_dir = os.path.join(base_output_dir, date_folder)
-    vc_pair_dir_name = f"{sanitize_filename(input_audio_name)}_x_{sanitize_filename(target_voice_name)}"
-    vc_pair_output_dir = os.path.join(vc_base_date_dir, vc_pair_dir_name)
-    os.makedirs(vc_pair_output_dir, exist_ok=True)
+    single_output_filename = f"output_{datetime.now().strftime('%H%M%S_%f')}.wav"
+    single_output_path = os.path.join(base_output_dir, single_output_filename)
+    os.makedirs(base_output_dir, exist_ok=True)
     try:
         if batch_mode:
             yield from yield_vc_updates(log_msg="Batch mode enabled. Parsing values...")
@@ -342,8 +342,6 @@ def generate_vc(audio_filepath,target_voice_filepath,inference_cfg_rate: float,s
             if not batch_values: raise gr.Error("Error: Please provide comma-separated values for batch generation.")
             yield from yield_vc_updates(log_msg=f"Batch sweep on '{batch_parameter}' with values: {batch_values}")
             yield from yield_vc_updates(log_msg=f"Generating {len(batch_values)} items in batch...")
-            batch_run_dir = os.path.join(vc_pair_output_dir, f"batch_sweep_{sanitize_filename(batch_parameter)}_{datetime.now().strftime('%H%M%S')}")
-            os.makedirs(batch_run_dir, exist_ok=True)
             generated_file_paths = []
             for i, value in enumerate(batch_values):
                 current_inference_cfg_rate, current_sigma_min, param_prefix = inference_cfg_rate, sigma_min, "unknown"
@@ -354,18 +352,16 @@ def generate_vc(audio_filepath,target_voice_filepath,inference_cfg_rate: float,s
                 yield from yield_vc_updates(log_msg=f"Generating item {i+1}/{len(batch_values)}: {batch_parameter}={value}")
                 wav = model_vc.generate(audio_filepath,target_voice_path=target_voice_filepath,inference_cfg_rate=current_inference_cfg_rate,sigma_min=current_sigma_min)
                 output_filename = f"{sanitize_filename(param_prefix)}_{datetime.now().strftime('%H%M%S_%f')}.wav"
-                output_path = os.path.join(batch_run_dir, output_filename)
+                output_path = os.path.join(base_output_dir, output_filename)
                 model_vc.save_wav(wav, output_path)
                 generated_file_paths.append(output_path)
                 yield from yield_vc_updates(log_msg=f"Saved: {output_path}")
-            final_message = f"Batch generation complete. {len(generated_file_paths)} files saved in: {batch_run_dir}"
+            final_message = f"Batch generation complete. {len(generated_file_paths)} files saved in: {base_output_dir}"
             yield from yield_vc_updates(log_msg=final_message, file_list=generated_file_paths)
             gr.Info(final_message)
         else: 
             yield from yield_vc_updates(log_msg="Performing single Voice-to-Voice generation...")
             wav = model_vc.generate(audio_filepath,target_voice_path=target_voice_filepath,inference_cfg_rate=inference_cfg_rate,sigma_min=sigma_min)
-            single_output_filename = f"output_{datetime.now().strftime('%H%M%S_%f')}.wav"
-            single_output_path = os.path.join(vc_pair_output_dir, single_output_filename)
             model_vc.save_wav(wav, single_output_path)
             output_audio_sr_np = (model_vc.sr, wav.squeeze(0).numpy())
             final_message = f"Single Voice-to-Voice generation complete. File saved in: {single_output_path}"
@@ -387,13 +383,8 @@ def generate_tts(text,audio_prompt_path,exaggeration,temperature,seed_num,cfg_we
         else: base_output_dir = os.path.join(_current_project_root_dir, PROJECT_SUBDIRS["single_generations_tts"])
     else:
         yield from yield_tts_updates(log_msg="No project selected, using generic 'outputs' folder.")
-        base_output_dir = os.path.join("outputs", "text2voice")
-    date_folder = datetime.now().strftime('%Y%m%d')
-    text_snippet_shorter = get_text_snippet_for_filename(text, max_len=15)
-    ref_audio_name = sanitize_filename(os.path.splitext(os.path.basename(audio_prompt_path))[0]) if audio_prompt_path else "no_ref_audio"
-    combined_tts_folder_name = f"{text_snippet_shorter}_x_{ref_audio_name}"
-    tts_output_combined_dir = os.path.join(base_output_dir, date_folder, combined_tts_folder_name)
-    os.makedirs(tts_output_combined_dir, exist_ok=True)
+        base_output_dir = os.path.join(r"E:\PERFIL\Downloads", "text2voice")
+    os.makedirs(base_output_dir, exist_ok=True)
     try:
         tts_output_filepath = None # Initialize
         if batch_mode:
@@ -406,8 +397,6 @@ def generate_tts(text,audio_prompt_path,exaggeration,temperature,seed_num,cfg_we
             if not batch_values: raise gr.Error("Error: Please provide comma-separated values for batch generation.")
             yield from yield_tts_updates(log_msg=f"Batch sweep on '{batch_parameter}' with values: {batch_values}")
             yield from yield_tts_updates(log_msg=f"Generating {len(batch_values)} items in batch...")
-            batch_run_dir = os.path.join(tts_output_combined_dir, f"batch_sweep_{sanitize_filename(batch_parameter)}_{datetime.now().strftime('%H%M%S')}")
-            os.makedirs(batch_run_dir, exist_ok=True)
             generated_tts_file_paths = []
             for i, value in enumerate(batch_values):
                 current_exaggeration, current_temperature, current_cfg_weight, current_seed_num, param_prefix = exaggeration, temperature, cfg_weight, seed_num, "unknown"
@@ -421,11 +410,11 @@ def generate_tts(text,audio_prompt_path,exaggeration,temperature,seed_num,cfg_we
                 wav = model_tts.generate(text,audio_prompt_path=audio_prompt_path,exaggeration=current_exaggeration,temperature=current_temperature,cfg_weight=current_cfg_weight)
                 output_sr_np = (model_tts.sr, wav.squeeze(0).numpy())
                 tts_output_filename = f"{param_prefix}_{datetime.now().strftime('%H%M%S_%f')}.wav"
-                tts_output_filepath = os.path.join(batch_run_dir, tts_output_filename)
+                tts_output_filepath = os.path.join(base_output_dir, tts_output_filename)
                 sf.write(tts_output_filepath, output_sr_np[1], output_sr_np[0])
                 generated_tts_file_paths.append(tts_output_filepath)
                 yield from yield_tts_updates(log_msg=f"Saved: {tts_output_filepath}")
-            final_message = f"Batch generation complete. {len(generated_tts_file_paths)} files saved in: {batch_run_dir}"
+            final_message = f"Batch generation complete. {len(generated_tts_file_paths)} files saved in: {base_output_dir}"
             yield from yield_tts_updates(log_msg=final_message, file_list=generated_tts_file_paths) 
             gr.Info(final_message)
         else: 
@@ -433,7 +422,7 @@ def generate_tts(text,audio_prompt_path,exaggeration,temperature,seed_num,cfg_we
             wav = model_tts.generate(text,audio_prompt_path=audio_prompt_path,exaggeration=exaggeration,temperature=temperature,cfg_weight=cfg_weight)
             output_sr_np = (model_tts.sr, wav.squeeze(0).numpy())
             tts_output_filename = f"output_{datetime.now().strftime('%H%M%S_%f')}.wav"
-            tts_output_filepath = os.path.join(tts_output_combined_dir, tts_output_filename)
+            tts_output_filepath = os.path.join(base_output_dir, tts_output_filename)
             sf.write(tts_output_filepath, output_sr_np[1], output_sr_np[0]) 
             yield from yield_tts_updates(log_msg=f"Saved TTS audio to: {tts_output_filepath}")
             final_message = "Text-to-Voice generation complete."
@@ -692,20 +681,18 @@ def run_batch_tts(ref_audio_path_tts_batch,tts_exaggeration_batch,tts_temp_batch
     if not ref_audio_path_tts_batch or not os.path.exists(ref_audio_path_tts_batch): raise gr.Error("Reference audio for batch TTS is required and must exist.")
     if not _current_project_root_dir: raise gr.Error("No project selected. Outputs cannot be meaningfully saved for batch runs without a project.")
     
-    base_output_dir = os.path.join(_current_project_root_dir, PROJECT_SUBDIRS["batch_generations_tts"])
+    base_output_dir = _current_project_root_dir
     run_id = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-    batch_run_specific_output_dir = os.path.join(base_output_dir, run_id) # This is the main folder for this specific batch run
-    
-    single_files_output_dir = os.path.join(batch_run_specific_output_dir, "single_files")
-    concatenated_output_dir = os.path.join(batch_run_specific_output_dir, "concatenated")
+    single_files_output_dir = base_output_dir
+    concatenated_output_dir = base_output_dir
     
     os.makedirs(single_files_output_dir, exist_ok=True)
     if concatenate_output: os.makedirs(concatenated_output_dir, exist_ok=True)
 
     # Save manifest
-    _save_batch_tts_manifest(batch_run_specific_output_dir, ref_audio_path_tts_batch)
+    _save_batch_tts_manifest(base_output_dir, ref_audio_path_tts_batch)
 
-    yield from yield_batch_tts_updates(log_msg=f"Batch run ID: {run_id}. Saving to: {batch_run_specific_output_dir}")
+    yield from yield_batch_tts_updates(log_msg=f"Batch run ID: {run_id}. Saving to: {base_output_dir}")
     yield from yield_batch_tts_updates(log_msg=f"Processing {len(text_files_to_process_list)} text files...")
     all_generated_wav_paths = []
     log_messages_list = [] 
@@ -747,7 +734,7 @@ def run_batch_tts(ref_audio_path_tts_batch,tts_exaggeration_batch,tts_temp_batch
 
 def handle_batch_vc_zip_upload(zip_filepath_vc):
     if not _current_project_root_dir: raise gr.Error("No project selected. Please select or create a project to upload batch files.")
-    if not zip_filepath_vc: return gr.update(value="", visible=True), [], "No .zip file uploaded for Batch VC."
+    if not zip_filepath_vc: return gr.update(value="", visible=True), [], "No .zip file uploaded for Batch VC.", None
     extract_dir_name = f"temp_batch_vc_upload_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
     extract_path = os.path.join(_current_project_root_dir, PROJECT_SUBDIRS["input_files"], extract_dir_name)
     os.makedirs(extract_path, exist_ok=True)
@@ -764,7 +751,7 @@ def handle_batch_vc_zip_upload(zip_filepath_vc):
         if not extracted_files: raise gr.Error(f"No audio files ({', '.join(valid_audio_extensions)}) found in the uploaded zip archive.")
         display_names = [os.path.basename(f) for f in extracted_files]
         message = f"Successfully extracted {len(extracted_files)} audio files from zip. Ready for Batch VC."
-        return "\n".join(display_names), extracted_files, message
+        return "\n".join(display_names), extracted_files, message, extract_path
     except Exception as e:
         if os.path.exists(extract_path): shutil.rmtree(extract_path)
         raise gr.Error(f"Error processing zip file for Batch VC: {e}")
@@ -776,30 +763,30 @@ def load_batch_vc_project_files():
     display_names = [os.path.basename(f) for f in full_paths]
     message = f"Loaded {len(full_paths)} audio files from project '{_current_project_name}'s '{PROJECT_SUBDIRS['processed_audio']}' directory. Ready for Batch VC."
     return "\n".join(display_names), full_paths, message
-def clear_batch_vc_files(): return "", [], "File selection cleared for Batch VC."
+def clear_batch_vc_files(): return "", [], "File selection cleared for Batch VC.", None
 def update_batch_vc_ref_voice_project_dropdown_choices(): return gr.update(choices=list_project_files('voice_conversion', '.wav'))
 def select_batch_vc_ref_voice_from_project(filename):
     if not filename: return gr.update(value=None)
     path = get_project_file_absolute_path(filename, 'voice_conversion')
     if not path or not os.path.exists(path): raise gr.Error(f"Reference voice file not found: {path}")
     return gr.update(value=path)
-def run_batch_vc(ref_voice_path_vc_batch,vc_inference_cfg_rate_batch,vc_sigma_min_batch,audio_files_to_process_list,concatenate_output_vc: bool):
+def run_batch_vc(ref_voice_path_vc_batch,vc_inference_cfg_rate_batch,vc_sigma_min_batch,audio_files_to_process_list,concatenate_output_vc: bool, batch_vc_temp_dir_state):
     model_vc = get_vc_model()
     yield from yield_batch_vc_updates(log_msg="Starting Batch Voice Conversion...", log_append=False, file_list=None)
     if not audio_files_to_process_list: raise gr.Error("No audio files selected for batch VC processing.")
     if not ref_voice_path_vc_batch or not os.path.exists(ref_voice_path_vc_batch): raise gr.Error("Reference voice for batch VC is required and must exist.")
     if not _current_project_root_dir: raise gr.Error("No project selected. Outputs cannot be meaningfully saved for batch runs without a project.")
-    base_output_dir = os.path.join(_current_project_root_dir, PROJECT_SUBDIRS["batch_generations_vc"])
+    base_output_dir = _current_project_root_dir
     run_id = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
-    batch_output_dir = os.path.join(base_output_dir, run_id)
-    single_files_output_dir_vc = os.path.join(batch_output_dir, "single_files")
-    concatenated_output_dir_vc = os.path.join(batch_output_dir, "concatenated")
+    single_files_output_dir_vc = base_output_dir
+    concatenated_output_dir_vc = base_output_dir
     os.makedirs(single_files_output_dir_vc, exist_ok=True)
     if concatenate_output_vc: os.makedirs(concatenated_output_dir_vc, exist_ok=True)
-    yield from yield_batch_vc_updates(log_msg=f"Batch VC run ID: {run_id}. Saving to: {batch_output_dir}")
+    yield from yield_batch_vc_updates(log_msg=f"Batch VC run ID: {run_id}. Saving to: {base_output_dir}")
     yield from yield_batch_vc_updates(log_msg=f"Processing {len(audio_files_to_process_list)} audio files...")
     all_converted_wav_paths = []
     log_messages_list_vc = []
+    temp_dir_to_delete = batch_vc_temp_dir_state
     try:
         for i, audio_filepath in enumerate(audio_files_to_process_list):
             audio_filename = os.path.basename(audio_filepath)
@@ -832,9 +819,34 @@ def run_batch_vc(ref_voice_path_vc_batch,vc_inference_cfg_rate_batch,vc_sigma_mi
         else:
             yield from yield_batch_vc_updates(log_msg=f"Batch VC complete. {len(all_converted_wav_paths)} individual files saved.", file_list=final_files_for_gr_output)
             gr.Info("Batch VC complete!")
+        # Force deletion after success
+        if temp_dir_to_delete and os.path.exists(temp_dir_to_delete):
+            try:
+                for root, dirs, files in os.walk(temp_dir_to_delete, topdown=False):
+                    for file in files:
+                        os.remove(os.path.join(root, file))
+                    for dir in dirs:
+                        os.rmdir(os.path.join(root, dir))
+                os.rmdir(temp_dir_to_delete)
+                logging.info(f"Force cleaned up temp dir: {temp_dir_to_delete}")
+            except Exception as del_e:
+                logging.error(f"Force deletion failed: {del_e}")
+        return final_files_for_gr_output
     except Exception as e:
         error_msg = f"Error during Batch Voice Conversion: {str(e)}"
         yield from yield_batch_vc_updates(log_msg=error_msg, file_list=None)
+        # Force deletion on error
+        if temp_dir_to_delete and os.path.exists(temp_dir_to_delete):
+            try:
+                for root, dirs, files in os.walk(temp_dir_to_delete, topdown=False):
+                    for file in files:
+                        os.remove(os.path.join(root, file))
+                    for dir in dirs:
+                        os.rmdir(os.path.join(root, dir))
+                os.rmdir(temp_dir_to_delete)
+                logging.info(f"Force cleaned up temp dir on error: {temp_dir_to_delete}")
+            except Exception as del_e:
+                logging.error(f"Force deletion on error failed: {del_e}")
         raise gr.Error(error_msg)
 
 # --- Data Preparation Helpers for Editing ---
@@ -1219,7 +1231,7 @@ def create_zip_from_selection(selected_paths, project_root_dir):
     if not selected_paths:
         return "No files or folders selected for download.", gr.update(visible=False)
 
-    temp_dir = "temp_downloads"
+    temp_dir = r"E:\PERFIL\Downloads\temp_downloads"
     os.makedirs(temp_dir, exist_ok=True)
     
     project_name = sanitize_filename(os.path.basename(project_root_dir))
@@ -1696,11 +1708,14 @@ with gr.Blocks(title="ChatterboxToolkitUI", theme=gr.themes.Default()) as demo:
                             batch_vc_output_files = gr.File(label="Download Converted Audio(s)", file_count="multiple", visible=False)
 
                     # --- Batch VC Event Handling ---
+                    batch_vc_temp_dir_state = gr.State(None)
+
                     batch_vc_load_zip_btn.click(
                         fn=handle_batch_vc_zip_upload,
                         inputs=[batch_vc_zip_upload],
-                        outputs=[batch_vc_files_display, batch_vc_files_to_process_state, batch_vc_log]
+                        outputs=[batch_vc_files_display, batch_vc_files_to_process_state, batch_vc_log, batch_vc_temp_dir_state]
                     )
+
                     batch_vc_use_project_files_btn.click(
                         fn=load_batch_vc_project_files,
                         inputs=[],
@@ -1724,7 +1739,8 @@ with gr.Blocks(title="ChatterboxToolkitUI", theme=gr.themes.Default()) as demo:
                             batch_vc_inference_cfg_rate_slider,
                             batch_vc_sigma_min_number,
                             batch_vc_files_to_process_state,
-                            batch_vc_concatenate_checkbox
+                            batch_vc_concatenate_checkbox,
+                            batch_vc_temp_dir_state
                         ],
                         outputs=[
                             batch_vc_log,
@@ -2371,5 +2387,9 @@ with gr.Blocks(title="ChatterboxToolkitUI", theme=gr.themes.Default()) as demo:
 
 ensure_projects_base_dir() # Ensure base directory is created on startup
 
+def open_browser():
+    webbrowser.open('http://127.0.0.1:7860')
+
 if __name__ == "__main__":
-    demo.queue().launch()
+    threading.Timer(1.25, open_browser).start()
+    demo.queue().launch(allowed_paths=[PROJECTS_BASE_DIR])
