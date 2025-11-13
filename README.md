@@ -1,10 +1,11 @@
 # FIXED ChatterboxToolkitUI 🎙️🧠
+WINDOWS ONLY!
 
 ChatterboxToolkitUI is a comprehensive web application built with Gradio that provides a user-friendly interface for advanced audio generation and workflow management using resemble-ai's Chatterbox model.
 This repo tries to "dirty-fix" it because it doesn't run in the state it is now. 
 I also modified stuff for my taste: 
 
-- Output folder is now named after the project name
+- Output folder is now named after the project name and it creates it in "Downloads" folder.
 - The app is not creating any more subfolders in the output folder, all output files are put in the root of the output folder instead.
 - The app now removes the temp folder that is created while processing files (inside output folder)
 - The app now launches the browser with the app ready to be used automatically on launch.
