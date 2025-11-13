@@ -114,16 +114,17 @@ Your browser should open with the app ready to be used.
 
 ## A Typical Workflow
 
-1.  **Create a Project**: Navigate to the "Projects" tab and create a new project.
-2.  **Prepare Data**:
+1.  **Launch** the app by using start_tts_webui.bat
+2.  **Create a Project**: Navigate to the "Projects" tab and create a new project.
+3.  **Prepare Data**:
     -   Upload a long text file to the project's `input_files` folder using the "Project Utilities" uploader or manually move it there.
     -   Go to the "Data Preparation" tab to split the text into manageable chunks. The outputs will be saved to the configured output folder.
-3.  **Generate Audio**:
+4.  **Generate Audio**:
     -   Go to the "Batch Generation" tab.
     -   Load your processed files from the project.
     -   Select a reference voice and your desired parameters.
     -   Run the batch generation.
-4.  **Review & Refine**:
+5.  **Review & Refine**:
     -   Go to the "Edit Project Data" tab.
     -   Use the "Regenerate" sub-tab to listen to your outputs. If one is imperfect, send it to the Single TTS tab, tweak the parameters, and replace it.
     -   Use the "Edit Text" sub-tab to fix any pronounciation issues you find in your source text chunks.
